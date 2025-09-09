@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
+from storage import TaskStorage
 
 app = FastAPI()
+storage = TaskStorage("tasks.json")
 
 
 class Task(BaseModel):
@@ -13,38 +15,39 @@ class Task(BaseModel):
     status: str
 
 
-# Добаляю хранение в оперативной памяти
-tasks = []
-current_id = 1
+class TaskCreate(BaseModel):
+    """Модель для создания задачи"""
+
+    title: str
+    status: str
 
 
 @app.get("/tasks", response_model=List[Task])
 def get_tasks():
     """ "Получение всвех задач"""
+    tasks = storage.load_tasks()
     return tasks
 
 
 @app.post("/tasks", response_model=Task)
-def create_task(task_data: dict):
+def create_task(task_data: TaskCreate):
     """Создание новой задачи"""
-    global current_id
-    task = Task(
-        id=current_id,
-        title=task_data.get("title"),
-        status=task_data.get("status"),
-    )
+    tasks = storage.load_tasks()
+    new_id = max([task["id"] for task in tasks], default=0) + 1
+    task = {"id": new_id, "title": task_data.title, "status": task_data.status}
     tasks.append(task)
-    current_id += 1
+    storage.save_tasks(tasks)
     return task
 
 
 @app.put("/tasks/{task_id}", response_model=Task)
-def update_task(task_id: int, task_data: dict):
+def update_task(task_id: int, task_data: TaskCreate):
     """Обновление задачи"""
+    tasks = storage.load_tasks()
     for task in tasks:
-        if task.id == task_id:
-            task.title = task_data.get("title", task.title)
-            task.status = task_data.get("status", task.status)
+        if task["id"] == task_id:
+            task["title"] = task_data.title
+            task["status"] = task_data.status
             return task
     raise HTTPException(status_code=404, detail="Задача не найдена")
 
@@ -52,9 +55,10 @@ def update_task(task_id: int, task_data: dict):
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int):
     """Удаление задачи"""
-    global tasks
+    tasks = storage.load_tasks()
     for i, task in enumerate(tasks):
-        if task.id == task_id:
+        if task["id"] == task_id:
             tasks.pop(i)
+            storage.save_tasks(tasks)
             return {"message": "Задача удалена"}
     raise HTTPException(status_code=404, detail="Задача не найдена")
