@@ -28,7 +28,11 @@ def get_tasks():
 def create_task(task_data: dict):
     """Создание новой задачи"""
     global current_id
-    task = Task(id=current_id, **task_data)
+    task = Task(
+        id=current_id,
+        title=task_data.get("title"),
+        status=task_data.get("status"),
+    )
     tasks.append(task)
     current_id += 1
     return task
@@ -47,6 +51,7 @@ def update_task(task_id: int, task_data: dict):
 
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int):
+    """Удаление задачи"""
     global tasks
     for i, task in enumerate(tasks):
         if task.id == task_id:
