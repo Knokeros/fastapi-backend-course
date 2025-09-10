@@ -1,14 +1,31 @@
+import os
+from typing import List
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List
-from storage import TaskStorage
+from dotenv import load_dotenv
+
+from cloud_storage import CloudTaskStorage
+
+
+# Загружаем .env
+load_dotenv()
 
 app = FastAPI()
-storage = TaskStorage("tasks.json")
+
+BIN_ID = os.getenv("JSONBIN_BIN_ID")
+API_KEY = os.getenv("JSONBIN_API_KEY")
+
+if not BIN_ID or not API_KEY:
+    raise RuntimeError(
+        "Не найдены переменные окружения JSONBIN_BIN_ID или JSONBIN_API_KEY"
+    )
+
+storage = CloudTaskStorage(BIN_ID, API_KEY)
 
 
 class Task(BaseModel):
-    """Модель Задачи"""
+    """Модель задачи"""
 
     id: int
     title: str
@@ -24,7 +41,7 @@ class TaskCreate(BaseModel):
 
 @app.get("/tasks", response_model=List[Task])
 def get_tasks():
-    """ "Получение всвех задач"""
+    """Получение всех задач"""
     tasks = storage.load_tasks()
     return tasks
 
@@ -48,6 +65,7 @@ def update_task(task_id: int, task_data: TaskCreate):
         if task["id"] == task_id:
             task["title"] = task_data.title
             task["status"] = task_data.status
+            storage.save_tasks(tasks)
             return task
     raise HTTPException(status_code=404, detail="Задача не найдена")
 
