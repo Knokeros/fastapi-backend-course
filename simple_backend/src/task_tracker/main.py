@@ -1,27 +1,28 @@
 import os
 from typing import List
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
-
 from cloud_storage import CloudTaskStorage
-
+from cloud_flare import CloudflareAIClient
 
 # Загружаем .env
 load_dotenv()
 
 app = FastAPI()
 
+# Конфигурация
 BIN_ID = os.getenv("JSONBIN_BIN_ID")
-API_KEY = os.getenv("JSONBIN_API_KEY")
+JSONBIN_API_KEY = os.getenv("JSONBIN_API_KEY")
+CLOUDFLARE_AI_API_KEY = os.getenv("CLOUDFLARE_AI_API_KEY")
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID")
 
-if not BIN_ID or not API_KEY:
-    raise RuntimeError(
-        "Не найдены переменные окружения JSONBIN_BIN_ID или JSONBIN_API_KEY"
-    )
+if not all([BIN_ID, JSONBIN_API_KEY, CLOUDFLARE_AI_API_KEY, CLOUDFLARE_ACCOUNT_ID]):
+    raise RuntimeError("Не найдены необходимые переменные окружения")
 
-storage = CloudTaskStorage(BIN_ID, API_KEY)
+# Инициализация клиентов
+storage = CloudTaskStorage(BIN_ID, JSONBIN_API_KEY)
+ai_client = CloudflareAIClient(CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_API_KEY)
 
 
 class Task(BaseModel):
@@ -30,6 +31,7 @@ class Task(BaseModel):
     id: int
     title: str
     status: str
+    solution_advice: str = ""  # Новое поле для советов по решению
 
 
 class TaskCreate(BaseModel):
@@ -39,22 +41,34 @@ class TaskCreate(BaseModel):
     status: str
 
 
+@app.post("/tasks", response_model=Task)
+async def create_task(task_data: TaskCreate):
+    """Создание новой задачи с AI-анализом"""
+    tasks = storage.load_tasks()
+    new_id = max([task["id"] for task in tasks], default=0) + 1
+
+    # Получаем советы от AI
+    solution_advice = ai_client.get_task_solutions(task_data.title)
+
+    # Создаем задачу с советами
+    task = {
+        "id": new_id,
+        "title": task_data.title,
+        "status": task_data.status,
+        "solution_advice": solution_advice,
+    }
+
+    tasks.append(task)
+    storage.save_tasks(tasks)
+    return task
+
+
+# Остальные endpoints остаются без изменений
 @app.get("/tasks", response_model=List[Task])
 def get_tasks():
     """Получение всех задач"""
     tasks = storage.load_tasks()
     return tasks
-
-
-@app.post("/tasks", response_model=Task)
-def create_task(task_data: TaskCreate):
-    """Создание новой задачи"""
-    tasks = storage.load_tasks()
-    new_id = max([task["id"] for task in tasks], default=0) + 1
-    task = {"id": new_id, "title": task_data.title, "status": task_data.status}
-    tasks.append(task)
-    storage.save_tasks(tasks)
-    return task
 
 
 @app.put("/tasks/{task_id}", response_model=Task)

@@ -12,11 +12,14 @@ class CloudTaskStorage:
         """Загрузка задач из облака"""
         response = requests.get(self.base_url, headers=self.headers)
         if response.status_code == 200:
-            return response.json()["record"]["tasks"]
+            data = response.json()["record"]
+            # Поддержка старого формата (массив задач) и нового (объект с tasks)
+            return data.get("tasks", data) if isinstance(data, dict) else data
         raise Exception(f"Ошибка загрузки: {response.text}")
 
     def save_tasks(self, tasks):
         """Сохранение задач в облаке"""
+        # Сохраняем как объект с ключом tasks для consistency
         data = {"tasks": tasks}
         response = requests.put(self.base_url, headers=self.headers, json=data)
         if response.status_code == 200:
