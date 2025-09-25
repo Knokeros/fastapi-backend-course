@@ -1,17 +1,24 @@
-import requests
+from base_http_client import BaseHTTPClient
 
 
-class CloudflareAIClient:
+class CloudflareAIClient(BaseHTTPClient):
     """Клиент для работы с Cloudflare AI API"""
 
     def __init__(self, account_id: str, api_key: str):
-        self.base_url = (
-            f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run"
-        )
-        self.headers = {
+        base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run"
+        headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        super().__init__(base_url, headers)
+
+    def load_data(self) -> Any:
+        """Не используется для AI клиента, но требуется абстрактным методом"""
+        raise NotImplementedError("Метод load_data не реализован для AI клиента")
+
+    def save_data(self, data: Any) -> bool:
+        """Не используется для AI клиента, но требуется абстрактным методом"""
+        raise NotImplementedError("Метод save_data не реализован для AI клиента")
 
     def get_task_solutions(self, task_title: str) -> str:
         """Получить способы решения задачи от LLM"""
@@ -31,22 +38,14 @@ class CloudflareAIClient:
                 },
                 {"role": "user", "content": prompt},
             ],
-            "model": "@cf/meta/llama-3-8b-instruct",  # Или другая модель
+            "model": "@cf/meta/llama-3-8b-instruct",
             "max_tokens": 500,
         }
 
         try:
-            response = requests.post(
-                f"{self.base_url}/@cf/meta/llama-3-8b-instruct",
-                headers=self.headers,
-                json=payload,
-                timeout=30,
+            result = self._make_request(
+                "POST", "/@cf/meta/llama-3-8b-instruct", json=payload
             )
-            response.raise_for_status()
-
-            result = response.json()
             return result["result"]["response"]
-
-        except requests.exceptions.RequestException as e:
-            print(f"Ошибка Cloudflare AI: {e}")
+        except Exception:
             return "Не удалось получить рекомендации"
